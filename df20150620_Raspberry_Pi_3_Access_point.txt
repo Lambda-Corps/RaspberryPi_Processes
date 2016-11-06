@@ -1,0 +1,191 @@
+========================
+Raspberry pi 3 Configure as access point
+
+References: 
+https://frillip.com/using-your-raspberry-pi-3-as-a-wifi-access-point-with-hostapd/
+https://wiki.alpinelinux.org/wiki/Raspberry_Pi_3_-_Configuring_it_as_wireless_access_point_-AP_Mode
+
+
+1) Configure the RPI to access your wired home network.  
+The RPI needs to install packages to support the Access point and install a DHCP and DNS server.
+Installation could be performed offline but online is easier since an online installation gets all of the dependencies.
+
+
+sudo vi /etc/dhcpcd.conf
+
+===(/etc/dhcpcd.conf)========================================
+
+interface eth0
+static ip_address=206.37.162.100/24
+static routers=206.37.162.122
+static domain_name_servers=206.37.162.122
+
+
+
+1) Install access point and DNS/DHCP packages
+
+ sudo apt-get update
+ sudo apt-get install dnsmasq hostapd
+
+2) Update DHCP configuration file
+sudo vi /etc/dhcpcd.conf
+
+===(/etc/dhcpcd.conf)========================================
+denyinterfaces wlan0 
+
+interface eth0
+static ip_address=10.18.95.100/24
+static routers=10.18.95.1
+static domain_name_servers=10.18.95.2
+
+=================
+
+3) Add static IP address of wireless interface (wlan0)
+
+sudo vi /etc/network/interfaces
+
+allow-hotplug wlan0  
+iface wlan0 inet static  
+    address 192.168.33.1
+    netmask 255.255.255.0
+    network 192.168.33.0
+    broadcast 192.168.33.255
+#    wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+
+
+
+4) Restart the DHCP Service 
+sudo service dhcpcd restart
+
+
+
+5)  Reload the configuration for wlan0
+sudo ifdown wlan0
+sudo ifup wlan0
+
+
+6) Configure HostAP
+
+sudo vi /etc/hostapd/hostapd.conf
+
+===(/etc/hostapd/hostapd.conf)==================================================
+# This is the name of the WiFi interface we configured above
+interface=wlan0
+
+# Use the nl80211 driver with the brcmfmac driver
+driver=nl80211
+
+# This is the name of the network
+ssid=Pi_AP33
+
+# Use the 2.4GHz band
+hw_mode=g
+
+# Use channel 6
+channel=6
+
+# Enable 802.11n
+ieee80211n=1
+
+# Enable WMM
+wmm_enabled=1
+
+# Enable 40MHz channels with 20ns guard interval
+ht_capab=[HT40][SHORT-GI-20][DSSS_CCK-40]
+
+# Accept all MAC addresses
+macaddr_acl=0
+
+# Use WPA authentication
+auth_algs=1
+
+# Require clients to know the network name
+ignore_broadcast_ssid=0
+
+# Use WPA2
+wpa=2
+
+# Use a pre-shared key
+wpa_key_mgmt=WPA-PSK
+
+# The network passphrase
+wpa_passphrase=raspberry
+
+# Use AES, instead of TKIP
+rsn_pairwise=CCMP
+========================================================
+
+
+
+7) Test the AP to see if it is visiable
+
+sudo /usr/sbin/hostapd /etc/hostapd/hostapd.conf
+
+8) Tell hostapd where to look for the config file when it starts up on boot.
+
+sudo vi /etc/default/hostapd
+
+Find the line #DAEMON_CONF="" 
+Replace it with 
+DAEMON_CONF="/etc/hostapd/hostapd.conf"
+
+
+9) Configure dnsmasq
+sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
+sudo vi /etc/dnsmasq.conf 
+
+
+
+10) Update dnsmasq
+sudo vi /etc/dnsmasq.conf 
+
+interface=wlan0      # Use interface wlan0  
+listen-address=192.168.33.1 # Explicitly specify the address to listen on  
+bind-interfaces      # Bind to the interface to make sure we aren't sending things elsewhere  
+server=8.8.8.8       # Forward DNS requests to Google DNS  
+domain-needed        # Don't forward short names  
+bogus-priv           # Never forward addresses in the non-routed address spaces.  
+dhcp-range=192.168.33.10,192.168.33.20,12h # Assign IP addresses between 192.168.33.10 and 192.168.33.20 with a 12 hour lease time
+
+
+
+11) Did not setup "Set up IPv4 forwarding"
+
+
+sudo vi /etc/sysctl.conf
+
+remove the # from the beginning of the line containing net.ipv4.ip_forward=1
+
+
+sudo sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+
+
+
+sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE  
+sudo iptables -A FORWARD -i eth0 -o wlan0 -m state --state RELATED,ESTABLISHED -j ACCEPT  
+sudo iptables -A FORWARD -i wlan0 -o eth0 -j ACCEPT 
+
+
+
+sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
+
+sudo vi /etc/rc.local
+
+
+
+12) Restart services
+
+sudo service hostapd start
+sudo service dnsmasq start
+
+
+
+
+
+
+
+
+==========================================================================================
+==========================================================================================
+==========================================================================================
+==========================================================================================
